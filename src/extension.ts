@@ -127,178 +127,173 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _getHtmlForWebview(webview: vscode.Webview) {
-    return `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>CSS Custom Properties</title>
-                <style>
-                    body {
-                        padding: 10px;
-                        color: var(--vscode-foreground);
-                        font-family: var(--vscode-font-family);
-                        font-size: var(--vscode-font-size);
-                        background-color: var(--vscode-editor-background);
-                    }
-                    .container {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 10px;
-                    }
-                    .search-container {
-                        position: sticky;
-                        top: 0;
-                        background-color: var(--vscode-editor-background);
-                        padding: 10px 0;
-                        z-index: 1;
-                    }
-                    #searchInput {
-                        width: 100%;
-                        padding: 5px;
-                        background-color: var(--vscode-input-background);
-                        color: var(--vscode-input-foreground);
-                        border: 1px solid var(--vscode-input-border);
-                        border-radius: 2px;
-                    }
-                    #propertyList {
-                        list-style: none;
-                        padding: 0;
-                        margin: 0;
-                        display: flex;
-                        flex-direction: column;
-                        gap: 4px;
-                    }
-                    .property-item {
-                        padding: 4px 8px;
-                        cursor: pointer;
-                        border-radius: 3px;
-                    }
-                    .property-item:hover {
-                        background-color: var(--vscode-list-hoverBackground);
-                    }
-                    .select-folder {
-                        background-color: var(--vscode-button-background);
-                        color: var(--vscode-button-foreground);
-                        border: none;
-                        padding: 8px;
-                        cursor: pointer;
-                        border-radius: 2px;
-                    }
-                    .select-folder:hover {
-                        background-color: var(--vscode-button-hoverBackground);
-                    }
-                    .no-properties {
-                        color: var(--vscode-descriptionForeground);
-                        text-align: center;
-                        padding: 20px;
-                    }
-                    .folder-info {
-                        color: var(--vscode-descriptionForeground);
-                        font-size: 0.9em;
-                        padding: 5px 0;
-                        border-bottom: 1px solid var(--vscode-panel-border);
-                        margin-bottom: 10px;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div id="folderInfo" class="folder-info" style="display: none;"></div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="select-folder" onclick="selectFolder()">Select CSS Folder</button>
-                        <button class="select-folder" onclick="refresh()">Refresh</button>
-                    </div>
-                    <div class="search-container">
-                        <input type="text" id="searchInput" placeholder="Filter properties..." />
-                    </div>
-                    <ul id="propertyList"></ul>
-                </div>
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSS VarBuddy</title>
+    <style>
+        body {
+            padding: 10px;
+            color: var(--vscode-foreground);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            background-color: var(--vscode-editor-background);
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .search-container {
+            position: sticky;
+            top: 0;
+            background-color: var(--vscode-editor-background);
+            padding: 10px 0;
+            z-index: 1;
+        }
+        #searchInput {
+            width: 100%;
+            padding: 5px;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 2px;
+        }
+        #propertyList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .property-item {
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .property-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+        .select-folder {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        .select-folder:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        .no-properties {
+            color: var(--vscode-descriptionForeground);
+            text-align: center;
+            padding: 20px;
+        }
+        .folder-info {
+            color: var(--vscode-descriptionForeground);
+            font-size: 0.9em;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="folderInfo" class="folder-info" style="display: none;"></div>
+        <div style="display: flex; gap: 8px;">
+            <button class="select-folder" onclick="selectFolder()">Select CSS Folder</button>
+            <button class="select-folder" onclick="refresh()">Refresh</button>
+        </div>
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Filter properties..." />
+        </div>
+        <ul id="propertyList"></ul>
+    </div>
 
-                <script>
-                    const vscode = acquireVsCodeApi();
-                    let properties = [];
-                    let currentFolder = '';
+    <script>
+        const vscode = acquireVsCodeApi();
+        let properties = [];
+        let currentFolder = '';
 
-                    function selectFolder() {
-                        vscode.postMessage({ type: 'selectFolder' });
-                    }
+        function selectFolder() {
+            vscode.postMessage({ type: 'selectFolder' });
+        }
 
-                    function refresh() {
-                        vscode.postMessage({ type: 'refresh' });
-                    }
+        function refresh() {
+            vscode.postMessage({ type: 'refresh' });
+        }
 
-                    function insertProperty(property) {
-                        vscode.postMessage({ 
-                            type: 'insertProperty',
-                            value: property
-                        });
-                    }
+        function insertProperty(property) {
+            vscode.postMessage({ 
+                type: 'insertProperty',
+                value: property
+            });
+        }
 
-                    function filterProperties(searchTerm) {
-                        const filtered = properties.filter(prop => 
-                            prop.toLowerCase().includes(searchTerm.toLowerCase())
-                        );
-                        renderProperties(filtered);
-                    }
+        function filterProperties(searchTerm) {
+            const filtered = properties.filter(prop => 
+                prop.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            renderProperties(filtered);
+        }
 
-                    function renderProperties(props) {
-                        const list = document.getElementById('propertyList');
-                        const folderInfo = document.getElementById('folderInfo');
-                        list.innerHTML = '';
-                        
-                        if (currentFolder) {
-                            const folderName = currentFolder.split('/').pop() || currentFolder.split('\\').pop() || 'Unknown';
-                            folderInfo.textContent = 'Folder: ' + folderName;
-                            folderInfo.style.display = 'block';
-                        } else {
-                            folderInfo.style.display = 'none';
-                        }
-                        
-                        if (props.length === 0 && properties.length > 0) {
-                            list.innerHTML = '<li class="no-properties">No matching properties found</li>';
-                            return;
-                        }
-                        
-                        if (properties.length === 0) {
-                            list.innerHTML = '<li class="no-properties">Select a folder to scan for CSS custom properties</li>';
-                            return;
-                        }
+        function renderProperties(props) {
+            const list = document.getElementById('propertyList');
+            const folderInfo = document.getElementById('folderInfo');
+            list.innerHTML = '';
+            
+            if (currentFolder) {
+                const folderName = currentFolder.split('/').pop() || currentFolder.split('\\\\').pop() || 'Unknown';
+                folderInfo.textContent = 'Folder: ' + folderName;
+                folderInfo.style.display = 'block';
+            } else {
+                folderInfo.style.display = 'none';
+            }
+            
+            if (props.length === 0 && properties.length > 0) {
+                list.innerHTML = '<li class="no-properties">No matching properties found</li>';
+                return;
+            }
+            
+            if (properties.length === 0) {
+                list.innerHTML = '<li class="no-properties">Select a folder to scan for CSS custom properties</li>';
+                return;
+            }
 
-                        props.forEach(prop => {
-                            const li = document.createElement('li');
-                            li.className = 'property-item';
-                            li.textContent = prop;
-                            li.onclick = () => insertProperty(prop);
-                            list.appendChild(li);
-                        });
-                    }
+            props.forEach(prop => {
+                const li = document.createElement('li');
+                li.className = 'property-item';
+                li.textContent = prop;
+                li.onclick = () => insertProperty(prop);
+                list.appendChild(li);
+            });
+        }
 
-                    // Listen for messages from the extension
-                    window.addEventListener('message', event => {
-                        const message = event.data;
-                        switch (message.type) {
-                            case 'updateProperties':
-                                properties = message.properties;
-                                currentFolder = message.folderPath || '';
-                                renderProperties(properties);
-                                break;
-                        }
-                    });
-
-                    // Set up search input handler
-                    const searchInput = document.getElementById('searchInput');
-                    searchInput.addEventListener('input', (e) => {
-                        filterProperties(e.target.value);
-                    });
-
-                    // Initial render
+        window.addEventListener('message', event => {
+            const message = event.data;
+            switch (message.type) {
+                case 'updateProperties':
+                    properties = message.properties;
+                    currentFolder = message.folderPath || '';
                     renderProperties(properties);
-                </script>
-            </body>
-            </html>
-        `;
+                    break;
+            }
+        });
+
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('input', (e) => {
+            filterProperties(e.target.value);
+        });
+
+        renderProperties(properties);
+    </script>
+</body>
+</html>`;
   }
 }
 
