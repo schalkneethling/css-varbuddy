@@ -83,7 +83,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Version History
 
-### 0.1.0
+### 0.3.0
 
 - ✨ Added proper VS Code sidebar integration
 - 🎨 Improved UI with theme-adaptive design
