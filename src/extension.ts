@@ -46,6 +46,15 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
           break;
       }
     });
+
+    // Restore state if we have cached properties
+    if (this._customProperties.length > 0 && this._currentFolder) {
+      this._view.webview.postMessage({
+        type: "updateProperties",
+        properties: this._customProperties,
+        folderPath: this._currentFolder,
+      });
+    }
   }
 
   public async refresh() {
@@ -240,7 +249,8 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
                         list.innerHTML = '';
                         
                         if (currentFolder) {
-                            folderInfo.textContent = 'Scanning: ' + currentFolder.split('/').pop();
+                            const folderName = currentFolder.split('/').pop() || currentFolder.split('\\').pop() || 'Unknown';
+                            folderInfo.textContent = 'Folder: ' + folderName;
                             folderInfo.style.display = 'block';
                         } else {
                             folderInfo.style.display = 'none';
