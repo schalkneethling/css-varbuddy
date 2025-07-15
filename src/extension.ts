@@ -46,28 +46,11 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
           break;
       }
     });
-
-    // Auto-scan workspace if available
-    if (
-      vscode.workspace.workspaceFolders &&
-      vscode.workspace.workspaceFolders.length > 0
-    ) {
-      await this.updateProperties(
-        vscode.workspace.workspaceFolders[0].uri.fsPath,
-      );
-    }
   }
 
   public async refresh() {
     if (this._currentFolder) {
       await this.updateProperties(this._currentFolder);
-    } else if (
-      vscode.workspace.workspaceFolders &&
-      vscode.workspace.workspaceFolders.length > 0
-    ) {
-      await this.updateProperties(
-        vscode.workspace.workspaceFolders[0].uri.fsPath,
-      );
     }
   }
 
@@ -105,7 +88,8 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
 
     for (const file of files) {
       const content = await fs.promises.readFile(file, "utf-8");
-      const matches = content.match(/--[\w-]+/g) || [];
+      // Match CSS custom properties according to spec: --[a-zA-Z_][a-zA-Z0-9_-]*
+      const matches = content.match(/--[a-zA-Z_][a-zA-Z0-9_-]*/g) || [];
       matches.forEach((match: string) => properties.add(match));
     }
 

@@ -13,6 +13,27 @@ CSS VarBuddy provides a dedicated sidebar in VS Code that allows you to:
 - **🔄 Refresh** to re-scan for updated properties
 - **🎨 Theme adaptive** interface that matches your VS Code theme
 
+### Matching CSS Custom Properties
+
+We use the following regular expression to match valid CSS custom property names:
+
+/--[a-zA-Z\_][a-zA-Z0-9_-]\*/g
+
+This matches strings that:
+• Start with --
+• Are followed by a letter (a–z, A–Z) or underscore (\_)
+• Continue with zero or more letters, digits, underscores, or hyphens
+
+✅ Examples
+• --main-color
+• --\_theme
+• --Header_1
+
+❌ Not matched
+• --1st-var (starts with a digit)
+• -- (no name)
+• -------- (invalid starting character)
+
 ## Installation
 
 ### From VS Code Marketplace
