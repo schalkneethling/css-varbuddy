@@ -3,7 +3,7 @@
   "displayName": "CSS VarBuddy",
   "description": "Index, find, and use your CSS custom properties in a snap.",
   "icon": "images/css-varbuddy@2x.png",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.94.0"
   },
