@@ -48,13 +48,13 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
     });
 
     // Restore state if we have cached properties
-    if (this._customProperties.length > 0 && this._currentFolder) {
-      this._view.webview.postMessage({
-        type: "updateProperties",
-        properties: this._customProperties,
-        folderPath: this._currentFolder,
-      });
-    }
+    // if (this._customProperties.length > 0 && this._currentFolder) {
+    //   this._view.webview.postMessage({
+    //     type: "updateProperties",
+    //     properties: this._customProperties,
+    //     folderPath: this._currentFolder,
+    //   });
+    // }
   }
 
   public async refresh() {
@@ -304,6 +304,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(
       "cssCustomPropertiesView",
       provider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
+      },
     ),
   );
 }
