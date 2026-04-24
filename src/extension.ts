@@ -2,12 +2,19 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 
-class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
+export const SELECTED_FOLDER_STORAGE_KEY = "cssVarBuddy.selectedFolder";
+export const CSS_CUSTOM_PROPERTY_DECLARATION_REGEX =
+  /(?:^|[^A-Za-z0-9_-])(--[A-Za-z_][A-Za-z0-9_-]*)\s*:/gm;
+
+export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _customProperties: string[] = [];
   private _currentFolder?: string;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _workspaceState: vscode.Memento,
+  ) {}
 
   public async resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -46,6 +53,8 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
           break;
       }
     });
+
+    await this.restoreSelectedFolder();
   }
 
   public async refresh() {
@@ -62,9 +71,14 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
       title: "Select CSS Folder",
     });
     if (folder && folder[0]) {
-      this._currentFolder = folder[0].fsPath;
-      await this.updateProperties(folder[0].fsPath);
+      await this.selectFolderPath(folder[0].fsPath);
     }
+  }
+
+  public async selectFolderPath(folderPath: string) {
+    this._currentFolder = folderPath;
+    await this._workspaceState.update(SELECTED_FOLDER_STORAGE_KEY, folderPath);
+    await this.updateProperties(folderPath);
   }
 
   private async updateProperties(folderPath: string) {
@@ -79,6 +93,58 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
       }
     } catch (error) {
       vscode.window.showErrorMessage(`Error scanning folder: ${error}`);
+      if (await this.isMissingRootFolder(folderPath, error)) {
+        await this.clearSelectedFolder();
+      } else {
+        console.warn(
+          `Skipping persisted folder clear because the selected root folder still exists: ${folderPath}`,
+        );
+      }
+      this.postEmptyProperties();
+    }
+  }
+
+  private async isMissingRootFolder(folderPath: string, error: unknown) {
+    if (this.isMissingPathError(error)) {
+      try {
+        await fs.promises.stat(folderPath);
+      } catch (statError) {
+        return this.isMissingPathError(statError);
+      }
+    }
+
+    return false;
+  }
+
+  private isMissingPathError(error: unknown) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    return code === "ENOENT" || code === "ENOTDIR";
+  }
+
+  private async restoreSelectedFolder() {
+    const selectedFolder = this._workspaceState.get<string>(
+      SELECTED_FOLDER_STORAGE_KEY,
+    );
+
+    if (selectedFolder) {
+      this._currentFolder = selectedFolder;
+      await this.updateProperties(selectedFolder);
+    }
+  }
+
+  private async clearSelectedFolder() {
+    this._currentFolder = undefined;
+    this._customProperties = [];
+    await this._workspaceState.update(SELECTED_FOLDER_STORAGE_KEY, undefined);
+  }
+
+  private postEmptyProperties() {
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: "updateProperties",
+        properties: [],
+        folderPath: "",
+      });
     }
   }
 
@@ -88,9 +154,8 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
 
     for (const file of files) {
       const content = await fs.promises.readFile(file, "utf-8");
-      // Match CSS custom properties according to spec: --[a-zA-Z_][a-zA-Z0-9_-]*
-      const matches = content.match(/--[a-zA-Z_][a-zA-Z0-9_-]*/g) || [];
-      matches.forEach((match: string) => properties.add(match));
+      const matches = content.matchAll(CSS_CUSTOM_PROPERTY_DECLARATION_REGEX);
+      Array.from(matches).forEach((match) => properties.add(match[1]));
     }
 
     return Array.from(properties).sort();
@@ -289,7 +354,10 @@ class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  const provider = new CustomPropertiesViewProvider(context.extensionUri);
+  const provider = new CustomPropertiesViewProvider(
+    context.extensionUri,
+    context.workspaceState,
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
