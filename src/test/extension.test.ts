@@ -3,6 +3,57 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import {
+  CSS_CUSTOM_PROPERTY_DECLARATION_REGEX,
+  CustomPropertiesViewProvider,
+  SELECTED_FOLDER_STORAGE_KEY,
+} from "../extension";
+
+class MockMemento implements vscode.Memento {
+  private values = new Map<string, unknown>();
+
+  constructor(initialValues: Record<string, unknown> = {}) {
+    Object.entries(initialValues).forEach(([key, value]) => {
+      this.values.set(key, value);
+    });
+  }
+
+  keys(): readonly string[] {
+    return Array.from(this.values.keys());
+  }
+
+  get<T>(key: string): T | undefined;
+  get<T>(key: string, defaultValue: T): T;
+  get<T>(key: string, defaultValue?: T): T | undefined {
+    return this.values.has(key) ? (this.values.get(key) as T) : defaultValue;
+  }
+
+  async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) {
+      this.values.delete(key);
+      return;
+    }
+
+    this.values.set(key, value);
+  }
+}
+
+const createMockWebviewView = () => {
+  const messages: unknown[] = [];
+  const webviewView = {
+    webview: {
+      options: {},
+      html: "",
+      onDidReceiveMessage: () => ({ dispose: () => undefined }),
+      postMessage: async (message: unknown) => {
+        messages.push(message);
+        return true;
+      },
+    },
+  } as unknown as vscode.WebviewView;
+
+  return { webviewView, messages };
+};
 
 suite("CSS VarBuddy Extension Test Suite", () => {
   let extension: vscode.Extension<any>;
@@ -97,7 +148,9 @@ suite("CSS VarBuddy Extension Test Suite", () => {
 
     // Read the file and check for properties manually
     const content = await fs.promises.readFile(testCssFile, "utf-8");
-    const matches = content.match(/--[a-zA-Z_][a-zA-Z0-9_-]*/g) || [];
+    const matches = Array.from(
+      content.matchAll(CSS_CUSTOM_PROPERTY_DECLARATION_REGEX),
+    ).map((match) => match[1]);
 
     assert.strictEqual(matches.length, 3);
     assert.ok(matches.includes("--test-property-1"));
@@ -195,46 +248,50 @@ suite("CSS VarBuddy Extension Test Suite", () => {
 
     // Read and verify content
     const content = await fs.promises.readFile(nestedCssFile, "utf-8");
-    const matches = content.match(/--[a-zA-Z_][a-zA-Z0-9_-]*/g) || [];
+    const matches = Array.from(
+      content.matchAll(CSS_CUSTOM_PROPERTY_DECLARATION_REGEX),
+    ).map((match) => match[1]);
     assert.strictEqual(matches.length, 1);
     assert.strictEqual(matches[0], "--nested-property");
   });
 
-  test("Should validate CSS custom property regex", () => {
-    // Test the regex pattern used to match CSS custom properties
-    const cssPropertyRegex = /--[a-zA-Z_][a-zA-Z0-9_-]*/g;
+  test("Should validate CSS custom property declaration regex", () => {
+    const matchDeclarations = (content: string) =>
+      Array.from(
+        content.matchAll(CSS_CUSTOM_PROPERTY_DECLARATION_REGEX),
+      ).map((match) => match[1]);
 
-    const validProperties = [
+    const validCss = `
+      :root {
+        --primary-color: red;
+        --secondary-color : blue;
+        --_private-property: 1rem;
+        --property123: 12px;
+        --property-name: green;
+      }
+    `;
+
+    assert.deepStrictEqual(matchDeclarations(validCss), [
       "--primary-color",
       "--secondary-color",
       "--_private-property",
       "--property123",
       "--property-name",
-    ];
+    ]);
 
-    const invalidProperties = [
-      "--123-invalid",
-      "--invalid@property",
-      "--invalid property",
-      "--invalid.property",
-    ];
+    const invalidCss = `
+      :root {
+        --123-invalid: red;
+        --: blue;
+        --------: green;
+        invalid-property: yellow;
+        color: var(--usage-only);
+        --invalid@property: pink;
+        --invalid.property: purple;
+      }
+    `;
 
-    // Test valid properties
-    validProperties.forEach((prop) => {
-      const match = prop.match(cssPropertyRegex);
-      assert.ok(match, `Should match valid property: ${prop}`);
-      assert.strictEqual(match![0], prop);
-    });
-
-    // Test invalid properties
-    invalidProperties.forEach((prop) => {
-      const match = prop.match(cssPropertyRegex);
-      assert.strictEqual(
-        match,
-        null,
-        `Should not match invalid property: ${prop}`,
-      );
-    });
+    assert.deepStrictEqual(matchDeclarations(invalidCss), []);
   });
 
   test("Should handle empty folder gracefully", async () => {
@@ -264,5 +321,126 @@ suite("CSS VarBuddy Extension Test Suite", () => {
     const fileName = path.basename(nonCssFile);
     const isCssFile = fileName.endsWith(".css") || fileName.endsWith(".scss");
     assert.strictEqual(isCssFile, false);
+  });
+
+  test("Should persist selected folder in workspace state", async () => {
+    const workspaceState = new MockMemento();
+    const provider = new CustomPropertiesViewProvider(
+      vscode.Uri.file(testFolder),
+      workspaceState,
+    );
+
+    await provider.selectFolderPath(testFolder);
+
+    assert.strictEqual(
+      workspaceState.get(SELECTED_FOLDER_STORAGE_KEY),
+      testFolder,
+    );
+  });
+
+  test("Should restore persisted folder when webview resolves", async () => {
+    const workspaceState = new MockMemento({
+      [SELECTED_FOLDER_STORAGE_KEY]: testFolder,
+    });
+    const provider = new CustomPropertiesViewProvider(
+      vscode.Uri.file(testFolder),
+      workspaceState,
+    );
+    const { webviewView, messages } = createMockWebviewView();
+
+    await provider.resolveWebviewView(
+      webviewView,
+      {} as vscode.WebviewViewResolveContext,
+      {} as vscode.CancellationToken,
+    );
+
+    const updateMessage = messages.find(
+      (message) =>
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "updateProperties",
+    ) as { folderPath: string; properties: string[] } | undefined;
+
+    assert.ok(updateMessage, "Expected persisted folder to update the webview");
+    assert.strictEqual(updateMessage.folderPath, testFolder);
+    assert.ok(updateMessage.properties.includes("--primary-color"));
+    assert.ok(updateMessage.properties.includes("--border-radius"));
+  });
+
+  test("Should clear persisted folder when restore scan fails", async () => {
+    const missingFolder = path.join(testFolder, "missing-folder");
+    const workspaceState = new MockMemento({
+      [SELECTED_FOLDER_STORAGE_KEY]: missingFolder,
+    });
+    const provider = new CustomPropertiesViewProvider(
+      vscode.Uri.file(testFolder),
+      workspaceState,
+    );
+    const { webviewView, messages } = createMockWebviewView();
+
+    await provider.resolveWebviewView(
+      webviewView,
+      {} as vscode.WebviewViewResolveContext,
+      {} as vscode.CancellationToken,
+    );
+
+    const resetMessage = messages.find(
+      (message) =>
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "updateProperties",
+    ) as { folderPath: string; properties: string[] } | undefined;
+
+    assert.strictEqual(
+      workspaceState.get(SELECTED_FOLDER_STORAGE_KEY),
+      undefined,
+    );
+    assert.deepStrictEqual(resetMessage?.properties, []);
+    assert.strictEqual(resetMessage?.folderPath, "");
+  });
+
+  test("Should keep persisted folder when scan fails but root exists", async () => {
+    const workspaceState = new MockMemento({
+      [SELECTED_FOLDER_STORAGE_KEY]: testFolder,
+    });
+    const provider = new CustomPropertiesViewProvider(
+      vscode.Uri.file(testFolder),
+      workspaceState,
+    );
+    const { webviewView, messages } = createMockWebviewView();
+    const originalReadFile = fs.promises.readFile;
+
+    try {
+      fs.promises.readFile = async () => {
+        const error = new Error("Could not read CSS file") as NodeJS.ErrnoException;
+        error.code = "EACCES";
+        throw error;
+      };
+
+      await provider.resolveWebviewView(
+        webviewView,
+        {} as vscode.WebviewViewResolveContext,
+        {} as vscode.CancellationToken,
+      );
+    } finally {
+      fs.promises.readFile = originalReadFile;
+    }
+
+    const resetMessage = messages.find(
+      (message) =>
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "updateProperties",
+    ) as { folderPath: string; properties: string[] } | undefined;
+
+    assert.strictEqual(
+      workspaceState.get(SELECTED_FOLDER_STORAGE_KEY),
+      testFolder,
+    );
+    assert.deepStrictEqual(resetMessage?.properties, []);
+    assert.strictEqual(resetMessage?.folderPath, "");
   });
 });
