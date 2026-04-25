@@ -223,15 +223,53 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
             margin: 0;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
         }
         .property-item {
-            padding: 4px 8px;
+            align-items: center;
+            background-color: color-mix(
+                in srgb,
+                var(--vscode-editorWidget-background) 72%,
+                transparent
+            );
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            box-sizing: border-box;
             cursor: pointer;
-            border-radius: 3px;
+            display: flex;
+            min-height: 32px;
+            padding: 6px 8px;
         }
-        .property-item:hover {
+        .property-item:hover,
+        .property-item:focus {
             background-color: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
+            outline: none;
+        }
+        .property-code {
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-editor-font-family), monospace;
+            font-size: var(--vscode-editor-font-size);
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+        .property-prefix {
+            color: var(--vscode-symbolIcon-operatorForeground, var(--vscode-textLink-foreground));
+        }
+        .property-segment {
+            color: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
+        }
+        .property-separator {
+            color: var(--vscode-descriptionForeground);
+        }
+        .property-item:nth-child(3n + 1) .property-segment {
+            color: var(--vscode-symbolIcon-colorForeground, var(--vscode-editor-foreground));
+        }
+        .property-item:nth-child(3n + 2) .property-segment {
+            color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-editor-foreground));
+        }
+        .property-item:nth-child(3n + 3) .property-segment {
+            color: var(--vscode-symbolIcon-constantForeground, var(--vscode-editor-foreground));
         }
         .select-folder {
             background-color: var(--vscode-button-background);
@@ -291,6 +329,36 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
             });
         }
 
+        function appendToken(parent, className, text) {
+            const token = document.createElement('span');
+            token.className = className;
+            token.textContent = text;
+            parent.appendChild(token);
+        }
+
+        function renderHighlightedProperty(property) {
+            const code = document.createElement('code');
+            code.className = 'property-code';
+
+            const prefix = property.startsWith('--') ? '--' : '';
+            const name = prefix ? property.slice(2) : property;
+            const segments = name.split('-');
+
+            if (prefix) {
+                appendToken(code, 'property-prefix', prefix);
+            }
+
+            segments.forEach((segment, index) => {
+                if (index > 0) {
+                    appendToken(code, 'property-separator', '-');
+                }
+
+                appendToken(code, 'property-segment', segment);
+            });
+
+            return code;
+        }
+
         function filterProperties(searchTerm) {
             const filtered = properties.filter(prop => 
                 prop.toLowerCase().includes(searchTerm.toLowerCase())
@@ -324,8 +392,17 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
             props.forEach(prop => {
                 const li = document.createElement('li');
                 li.className = 'property-item';
-                li.textContent = prop;
+                li.tabIndex = 0;
+                li.setAttribute('role', 'button');
+                li.setAttribute('aria-label', 'Insert ' + prop);
+                li.appendChild(renderHighlightedProperty(prop));
                 li.onclick = () => insertProperty(prop);
+                li.onkeydown = (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        insertProperty(prop);
+                    }
+                };
                 list.appendChild(li);
             });
         }
