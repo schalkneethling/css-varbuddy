@@ -5,6 +5,16 @@ import * as path from "path";
 export const SELECTED_FOLDER_STORAGE_KEY = "cssVarBuddy.selectedFolder";
 export const CSS_CUSTOM_PROPERTY_DECLARATION_REGEX =
   /(?:^|[^A-Za-z0-9_-])(--[A-Za-z_][A-Za-z0-9_-]*)\s*:/gm;
+export const CUSTOM_PROPERTY_PLURAL_RULES = new Intl.PluralRules("en-US");
+
+export function formatCustomPropertyCount(count: number) {
+  const noun =
+    CUSTOM_PROPERTY_PLURAL_RULES.select(count) === "one"
+      ? "property"
+      : "properties";
+
+  return `${count} custom ${noun}`;
+}
 
 export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
@@ -48,8 +58,18 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
           break;
         case "refresh":
           if (this._currentFolder) {
-            await this.updateProperties(this._currentFolder);
+            await this.updateProperties(this._currentFolder, {
+              notifyOnError: true,
+            });
           }
+          break;
+        case "clearFolder":
+          await this.clearSelectedFolder();
+          this.postPropertiesUpdate({
+            properties: [],
+            folderPath: "",
+            status: "Selected folder cleared.",
+          });
           break;
       }
     });
@@ -59,7 +79,9 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
 
   public async refresh() {
     if (this._currentFolder) {
-      await this.updateProperties(this._currentFolder);
+      await this.updateProperties(this._currentFolder, {
+        notifyOnError: true,
+      });
     }
   }
 
@@ -78,21 +100,28 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
   public async selectFolderPath(folderPath: string) {
     this._currentFolder = folderPath;
     await this._workspaceState.update(SELECTED_FOLDER_STORAGE_KEY, folderPath);
-    await this.updateProperties(folderPath);
+    await this.updateProperties(folderPath, { notifyOnError: true });
   }
 
-  private async updateProperties(folderPath: string) {
+  private async updateProperties(
+    folderPath: string,
+    { notifyOnError } = { notifyOnError: false },
+  ) {
     try {
       this._customProperties = await this.scanFolder(folderPath);
-      if (this._view) {
-        this._view.webview.postMessage({
-          type: "updateProperties",
-          properties: this._customProperties,
-          folderPath: folderPath,
-        });
-      }
+      const propertyCount = this._customProperties.length;
+      this.postPropertiesUpdate({
+        properties: this._customProperties,
+        folderPath: folderPath,
+        status:
+          propertyCount === 0
+            ? "No custom properties found."
+            : `Found ${formatCustomPropertyCount(propertyCount)}.`,
+      });
     } catch (error) {
-      vscode.window.showErrorMessage(`Error scanning folder: ${error}`);
+      if (notifyOnError) {
+        vscode.window.showErrorMessage(`Could not scan CSS folder: ${error}`);
+      }
       if (await this.isMissingRootFolder(folderPath, error)) {
         await this.clearSelectedFolder();
       } else {
@@ -139,11 +168,32 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
   }
 
   private postEmptyProperties() {
+    this.postPropertiesUpdate({
+      properties: [],
+      folderPath: "",
+      status: "Could not scan this folder. Choose another folder or refresh again.",
+      statusTone: "error",
+    });
+  }
+
+  private postPropertiesUpdate({
+    properties,
+    folderPath,
+    status,
+    statusTone = "info",
+  }: {
+    properties: string[];
+    folderPath: string;
+    status: string;
+    statusTone?: "info" | "error";
+  }) {
     if (this._view) {
       this._view.webview.postMessage({
         type: "updateProperties",
-        properties: [],
-        folderPath: "",
+        properties,
+        folderPath,
+        status,
+        statusTone,
       });
     }
   }
@@ -191,7 +241,8 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
     <title>CSS VarBuddy</title>
     <style>
         body {
-            padding: 10px;
+            padding-block: 0.5rem;
+            padding-inline: 0.625rem;
             color: var(--vscode-foreground);
             font-family: var(--vscode-font-family);
             font-size: var(--vscode-font-size);
@@ -200,57 +251,145 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
         .container {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 0.5rem;
+        }
+        .topbar {
+            align-items: start;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: space-between;
+        }
+        .folder-summary {
+            color: var(--vscode-descriptionForeground);
+            flex: 1;
+            font-size: 0.92em;
+            line-height: 1.35;
+            min-inline-size: 0;
+        }
+        .folder-name {
+            color: var(--vscode-foreground);
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .folder-meta {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .toolbar {
+            display: flex;
+            flex-shrink: 0;
+            gap: 0.25rem;
+        }
+        .toolbar-button,
+        .empty-state-button {
+            align-items: center;
+            background-color: var(--vscode-button-secondaryBackground, transparent);
+            border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+            border-radius: 0.25rem;
+            color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+            cursor: pointer;
+            display: inline-flex;
+            justify-content: center;
+        }
+        .toolbar-button {
+            font-size: 1em;
+            min-block-size: 1.875rem;
+            line-height: 1;
+            min-inline-size: 1.875rem;
+            padding-block: 0;
+            padding-inline: 0.45rem;
+        }
+        .toolbar-button:hover:not(:disabled),
+        .empty-state-button:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+        }
+        .toolbar-button:focus-visible,
+        .empty-state-button:focus-visible,
+        #searchInput:focus-visible,
+        .property-item:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 0.125rem;
+        }
+        .toolbar-button:disabled {
+            cursor: default;
+            opacity: 0.45;
+        }
+        .empty-state {
+            align-items: start;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 0.375rem;
+            color: var(--vscode-descriptionForeground);
+            display: flex;
+            flex-direction: column;
+            gap: 0.625rem;
+            padding: 0.875rem;
+        }
+        .empty-state-title {
+            color: var(--vscode-foreground);
+            font-weight: 600;
+        }
+        .empty-state p {
+            margin: 0;
+        }
+        .empty-state-button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            padding-block: 0.375rem;
+            padding-inline: 0.625rem;
         }
         .search-container {
             position: sticky;
-            top: 0;
+            inset-block-start: 0;
             background-color: var(--vscode-editor-background);
-            padding: 10px 0;
+            padding-block: 0.25rem;
+            padding-inline: 0;
             z-index: 1;
         }
         #searchInput {
-            width: 100%;
-            padding: 5px;
+            box-sizing: border-box;
+            inline-size: 100%;
+            padding-block: 0.375rem;
+            padding-inline: 0.5rem;
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
+            border-radius: 0.125rem;
         }
         #propertyList {
             list-style: none;
-            padding: 0;
-            margin: 0;
+            padding-block: 0;
+            padding-inline: 0;
+            margin-block: 0;
+            margin-inline: 0;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 0.125rem;
         }
         .property-item {
             align-items: center;
-            background-color: color-mix(
-                in srgb,
-                var(--vscode-editorWidget-background) 72%,
-                transparent
-            );
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 0.25rem;
             box-sizing: border-box;
             cursor: pointer;
             display: flex;
-            min-height: 32px;
-            padding: 6px 8px;
+            min-block-size: 1.75rem;
+            padding-block: 0.25rem;
+            padding-inline: 0.375rem;
         }
         .property-item:hover,
-        .property-item:focus {
+        .property-item:focus-visible {
             background-color: var(--vscode-list-hoverBackground);
             border-color: var(--vscode-focusBorder);
-            outline: none;
         }
         .property-code {
             color: var(--vscode-editor-foreground);
             font-family: var(--vscode-editor-font-family), monospace;
             font-size: var(--vscode-editor-font-size);
-            line-height: 1.5;
+            line-height: 1.35;
             overflow-wrap: anywhere;
         }
         .property-prefix {
@@ -271,39 +410,39 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
         .property-item:nth-child(3n + 3) .property-segment {
             color: var(--vscode-symbolIcon-constantForeground, var(--vscode-editor-foreground));
         }
-        .select-folder {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 8px;
-            cursor: pointer;
-            border-radius: 2px;
-        }
-        .select-folder:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
         .no-properties {
             color: var(--vscode-descriptionForeground);
             text-align: center;
-            padding: 20px;
+            padding-block: 1.25rem;
+            padding-inline: 1.25rem;
         }
-        .folder-info {
+        .status {
             color: var(--vscode-descriptionForeground);
             font-size: 0.9em;
-            padding: 5px 0;
-            border-bottom: 1px solid var(--vscode-panel-border);
-            margin-bottom: 10px;
+            min-height: 1.4em;
+        }
+        .status.error {
+            color: var(--vscode-errorForeground);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div id="folderInfo" class="folder-info" style="display: none;"></div>
-        <div style="display: flex; gap: 8px;">
-            <button class="select-folder" onclick="selectFolder()">Select CSS Folder</button>
-            <button class="select-folder" onclick="refresh()">Refresh</button>
+        <div id="emptyState" class="empty-state">
+            <div class="empty-state-title">Choose a CSS folder</div>
+            <p>Select a folder that contains CSS or SCSS files to index custom properties.</p>
+            <button class="empty-state-button" type="button" onclick="selectFolder()">Select CSS folder</button>
         </div>
-        <div class="search-container">
+        <div id="topbar" class="topbar" hidden>
+            <div id="folderInfo" class="folder-summary"></div>
+            <div class="toolbar" role="toolbar" aria-label="CSS VarBuddy actions">
+                <button id="selectFolderButton" class="toolbar-button" type="button" title="Select CSS folder" aria-label="Select CSS folder" onclick="selectFolder()">Folder</button>
+                <button id="refreshButton" class="toolbar-button" type="button" title="Refresh custom properties" aria-label="Refresh custom properties" onclick="refresh()">Refresh</button>
+                <button id="clearFolderButton" class="toolbar-button" type="button" title="Clear selected folder" aria-label="Clear selected folder" onclick="clearFolder()">Clear</button>
+            </div>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+        <div id="searchContainer" class="search-container" hidden>
             <input type="text" id="searchInput" placeholder="Filter properties..." />
         </div>
         <ul id="propertyList"></ul>
@@ -319,7 +458,12 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
         }
 
         function refresh() {
+            setStatus('Scanning selected folder...');
             vscode.postMessage({ type: 'refresh' });
+        }
+
+        function clearFolder() {
+            vscode.postMessage({ type: 'clearFolder' });
         }
 
         function insertProperty(property) {
@@ -366,18 +510,62 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
             renderProperties(filtered);
         }
 
+        function getFolderName(folderPath) {
+            return folderPath.split('/').pop() || folderPath.split('\\\\').pop() || folderPath;
+        }
+
+        function getPropertyCountLabel(count) {
+            const pluralRules = new Intl.PluralRules('en-US');
+            const noun = pluralRules.select(count) === 'one' ? 'property' : 'properties';
+
+            return count + ' custom ' + noun;
+        }
+
+        function setStatus(text, tone = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = text || '';
+            status.className = 'status' + (tone === 'error' ? ' error' : '');
+        }
+
+        function renderFolderInfo() {
+            const topbar = document.getElementById('topbar');
+            const emptyState = document.getElementById('emptyState');
+            const folderInfo = document.getElementById('folderInfo');
+            const searchContainer = document.getElementById('searchContainer');
+            const refreshButton = document.getElementById('refreshButton');
+            const clearFolderButton = document.getElementById('clearFolderButton');
+            const hasFolder = Boolean(currentFolder);
+
+            topbar.hidden = !hasFolder;
+            emptyState.hidden = hasFolder;
+            searchContainer.hidden = !hasFolder;
+            refreshButton.disabled = !hasFolder;
+            clearFolderButton.disabled = !hasFolder;
+
+            if (!hasFolder) {
+                folderInfo.textContent = '';
+                return;
+            }
+
+            const folderName = getFolderName(currentFolder) || 'Selected folder';
+            folderInfo.innerHTML = '';
+
+            const name = document.createElement('div');
+            name.className = 'folder-name';
+            name.textContent = folderName;
+
+            const meta = document.createElement('div');
+            meta.className = 'folder-meta';
+            meta.textContent = getPropertyCountLabel(properties.length);
+
+            folderInfo.appendChild(name);
+            folderInfo.appendChild(meta);
+        }
+
         function renderProperties(props) {
             const list = document.getElementById('propertyList');
-            const folderInfo = document.getElementById('folderInfo');
             list.innerHTML = '';
-            
-            if (currentFolder) {
-                const folderName = currentFolder.split('/').pop() || currentFolder.split('\\\\').pop() || 'Unknown';
-                folderInfo.textContent = 'Folder: ' + folderName;
-                folderInfo.style.display = 'block';
-            } else {
-                folderInfo.style.display = 'none';
-            }
+            renderFolderInfo();
             
             if (props.length === 0 && properties.length > 0) {
                 list.innerHTML = '<li class="no-properties">No matching properties found</li>';
@@ -385,7 +573,9 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
             }
             
             if (properties.length === 0) {
-                list.innerHTML = '<li class="no-properties">Select a folder to scan for CSS custom properties</li>';
+                if (currentFolder) {
+                    list.innerHTML = '<li class="no-properties">No custom properties found in this folder</li>';
+                }
                 return;
             }
 
@@ -413,6 +603,7 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
                 case 'updateProperties':
                     properties = message.properties;
                     currentFolder = message.folderPath || '';
+                    setStatus(message.status || '', message.statusTone || 'info');
                     renderProperties(properties);
                     break;
             }

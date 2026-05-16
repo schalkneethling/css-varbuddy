@@ -46,8 +46,8 @@ This matches strings that:
 ### From Source
 
 1. Clone this repository
-2. Run `npm install`
-3. Run `npm run compile`
+2. Run `pnpm install`
+3. Run `pnpm run compile`
 4. Press F5 to launch the extension in a new VS Code window
 
 ## Usage
@@ -69,7 +69,7 @@ This matches strings that:
 ### Prerequisites
 
 - Node.js
-- npm
+- pnpm
 - VS Code
 
 ### Setup
@@ -77,16 +77,17 @@ This matches strings that:
 ```bash
 git clone https://github.com/schalkneethling/css-varbuddy.git
 cd css-varbuddy
-npm install
+pnpm install
 ```
 
 ### Scripts
 
-- `npm run compile` - Compile TypeScript
-- `npm run watch` - Watch for changes and recompile
-- `npm run lint` - Run ESLint
-- `npm run package` - Create VSIX package
-- `npm run publish` - Publish to VS Code Marketplace
+- `pnpm run compile` - Compile TypeScript
+- `pnpm run watch` - Watch for changes and recompile
+- `pnpm run lint` - Run ESLint
+- `pnpm run package` - Create VSIX package
+- `pnpm run publish` - Publish to VS Code Marketplace
+- `pnpm run publish:patch` - Bump the patch version, package, and publish to VS Code Marketplace
 
 ### Debugging
 

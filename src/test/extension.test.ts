@@ -6,6 +6,7 @@ import * as os from "os";
 import {
   CSS_CUSTOM_PROPERTY_DECLARATION_REGEX,
   CustomPropertiesViewProvider,
+  formatCustomPropertyCount,
   SELECTED_FOLDER_STORAGE_KEY,
 } from "../extension";
 
@@ -130,6 +131,38 @@ suite("CSS VarBuddy Extension Test Suite", () => {
 
     assert.ok(cssView, "CSS Custom Properties view should be registered");
     assert.strictEqual(cssView.type, "webview");
+  });
+
+  test("Webview should expose accessible toolbar and status markup", async () => {
+    const provider = new CustomPropertiesViewProvider(
+      vscode.Uri.file(testFolder),
+      new MockMemento(),
+    );
+    const { webviewView } = createMockWebviewView();
+
+    await provider.resolveWebviewView(
+      webviewView,
+      {} as vscode.WebviewViewResolveContext,
+      {} as vscode.CancellationToken,
+    );
+
+    const html = webviewView.webview.html;
+
+    assert.ok(html.includes('role="toolbar"'));
+    assert.ok(html.includes('aria-label="CSS VarBuddy actions"'));
+    assert.ok(html.includes('aria-label="Select CSS folder"'));
+    assert.ok(html.includes('aria-label="Refresh custom properties"'));
+    assert.ok(html.includes('aria-label="Clear selected folder"'));
+    assert.ok(html.includes('role="status"'));
+    assert.ok(html.includes('aria-live="polite"'));
+    assert.ok(html.includes(":focus-visible"));
+    assert.ok(html.includes("hidden"));
+    assert.ok(html.includes("Intl.PluralRules"));
+  });
+
+  test("Should format custom property counts", () => {
+    assert.strictEqual(formatCustomPropertyCount(1), "1 custom property");
+    assert.strictEqual(formatCustomPropertyCount(2), "2 custom properties");
   });
 
   test("Should scan CSS files for custom properties", async () => {

@@ -40,17 +40,17 @@
     "commands": []
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "pnpm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
     "package": "vsce package",
-    "publish": "npm run package && vsce publish",
-    "publish:patch": "npm version patch && npm run package && vsce publish",
-    "publish:minor": "npm version minor && npm run package && vsce publish",
-    "publish:major": "npm version major && npm run package && vsce publish"
+    "publish": "pnpm run package && vsce publish",
+    "publish:patch": "pnpm version patch && pnpm run package && vsce publish",
+    "publish:minor": "pnpm version minor && pnpm run package && vsce publish",
+    "publish:major": "pnpm version major && pnpm run package && vsce publish"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",
@@ -62,8 +62,10 @@
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.24.0",
+    "eslint": "^10.4.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.4.2",
     "typescript": "^5.6.3"
-  }
+  },
+  "packageManager": "pnpm@11.1.2"
 }
