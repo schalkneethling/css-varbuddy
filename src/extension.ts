@@ -511,7 +511,9 @@ export class CustomPropertiesViewProvider implements vscode.WebviewViewProvider 
         }
 
         function getFolderName(folderPath) {
-            return folderPath.split('/').pop() || folderPath.split('\\\\').pop() || folderPath;
+            const segments = folderPath.split(/[\\\\/]+/).filter(Boolean);
+
+            return segments.pop() || folderPath;
         }
 
         function getPropertyCountLabel(count) {
